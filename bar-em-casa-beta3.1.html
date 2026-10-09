@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Bar em Casa — Beta 3</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:        #0f0e0c;
+    --bg2:       #1a1915;
+    --bg3:       #242320;
+    --border:    rgba(255,255,255,0.08);
+    --border2:   rgba(255,255,255,0.14);
+    --gold:      #c9a84c;
+    --gold2:     #e2c06a;
+    --text:      #f0ece2;
+    --text2:     #9c9789;
+    --text3:     #6b6760;
+    --red:       #d94f4f;
+    --green:     #4a9e77;
+    --amber:     #c27d2a;
+    --radius:    14px;
+    --radius-sm: 8px;
+    --font-sans: 'DM Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    padding-bottom: 90px;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 100px; left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--green); color: #fff;
+    padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: 500;
+    opacity: 0; transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none; z-index: 400; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Header ── */
+  .top-bar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(15,14,12,0.92);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 20px 12px;
+  }
+  .top-bar h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.2px; color: var(--text); }
+  .top-bar h1 span { color: var(--gold); }
+  .top-meta { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .chip { font-size: 11px; color: var(--text2); background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; }
+  .chip.warn { color: var(--red); border-color: rgba(217,79,79,0.3); background: rgba(217,79,79,0.08); }
+
+  /* ── Bottom nav ── */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 480px;
+    background: rgba(15,14,12,0.95);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    display: flex; z-index: 50;
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 4px; padding: 10px 0 14px;
+    font-size: 11px; color: var(--text3);
+    background: none; border: none; cursor: pointer;
+    font-family: var(--font-sans); transition: color 0.15s;
+  }
+  .nav-btn .nav-icon { font-size: 20px; line-height: 1; }
+  .nav-btn.active { color: var(--gold); }
+
+  /* ── Sections ── */
+  .section { display: none; padding: 20px; }
+  .section.active { display: block; }
+
+  /* ── Stats ── */
+  .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 20px; }
+  .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 10px; text-align: center; }
+  .stat-val { font-size: 18px; font-weight: 600; color: var(--gold); }
+  .stat-lbl { font-size: 10px; color: var(--text3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.6px; }
+
+  /* ── Cards ── */
+  .bottles-grid { display: flex; flex-direction: column; gap: 10px; }
+  .bottle-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 14px 12px;
+    position: relative; transition: border-color 0.15s, opacity 0.15s, transform 0.15s;
+  }
+  .bottle-card.is-empty { border-color: rgba(217,79,79,0.25); background: rgba(217,79,79,0.04); }
+  .bottle-card.is-low   { border-color: rgba(194,125,42,0.3); }
+  .bottle-card.dragging  { opacity: 0.4; transform: scale(0.97); }
+  .bottle-card.drag-over { border-color: var(--gold); border-style: dashed; }
+
+  .card-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+  .drag-handle {
+    display: flex; align-items: center; justify-content: center;
+    width: 18px; flex-shrink: 0; cursor: grab;
+    color: var(--text3); font-size: 18px; padding-top: 2px;
+    user-select: none; touch-action: none; letter-spacing: -2px;
+  }
+  .drag-handle:active { cursor: grabbing; color: var(--gold); }
+
+  .card-emoji { font-size: 34px; line-height: 1; flex-shrink: 0; }
+  .card-info  { flex: 1; min-width: 0; }
+  .card-name  { font-size: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-cat   { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+  .card-badges { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
+  .badge { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; border: 1px solid; }
+  .badge-low   { color: var(--amber); border-color: rgba(194,125,42,0.4); background: rgba(194,125,42,0.1); }
+  .badge-empty { color: var(--text3); border-color: var(--border); background: var(--bg3); }
+
+  .card-actions { display: flex; gap: 5px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .icon-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid var(--border2); background: var(--bg3);
+    cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text2); transition: all 0.15s; font-family: var(--font-sans);
+  }
+  .icon-btn:active { transform: scale(0.92); }
+  .icon-btn.use:hover    { background: var(--gold);  border-color: var(--gold);  color: #000; }
+  .icon-btn.edit:hover   { background: var(--gold2); border-color: var(--gold2); color: #000; }
+  .icon-btn.refill:hover { background: var(--green); border-color: var(--green); color: #fff; }
+  .icon-btn.del:hover    { background: var(--red);   border-color: var(--red);   color: #fff; }
+
+  .progress-track { height: 3px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+  .progress-fill  { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+  .fill-high  { background: var(--green); }
+  .fill-mid   { background: var(--amber); }
+  .fill-low   { background: var(--red); }
+  .fill-empty { background: var(--bg3); }
+
+  .card-foot { display: flex; justify-content: space-between; align-items: center; }
+  .ml-current { font-size: 17px; font-weight: 500; color: var(--text); }
+  .ml-of      { font-size: 12px; color: var(--text3); }
+  .use-foot-btn {
+    height: 30px; padding: 0 14px;
+    background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 20px; color: var(--gold); font-size: 12px; font-weight: 500;
+    font-family: var(--font-sans); cursor: pointer; transition: all 0.15s;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .use-foot-btn:hover { background: var(--gold); color: #000; border-color: var(--gold); }
+  .use-foot-btn:active { transform: scale(0.95); }
+  .empty-state { text-align: center; padding: 50px 20px; font-size: 14px; color: var(--text3); line-height: 1.7; }
+  .empty-state .big { font-size: 40px; margin-bottom: 12px; }
+
+  /* ── Form ── */
+  .form-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+  .form-title { font-size: 17px; font-weight: 600; margin-bottom: 16px; color: var(--gold2); }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--font-sans); font-size: 15px; padding: 0 12px;
+    height: 44px; appearance: none; -webkit-appearance: none;
+  }
+  .field textarea { height: auto; padding: 10px 12px; min-height: 72px; resize: none; line-height: 1.5; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: rgba(201,168,76,0.05); }
+  .field input::placeholder, .field textarea::placeholder { color: var(--text3); }
+  .field select option { background: #242320; color: #f0ece2; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Emoji picker */
+  .emoji-picker-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .ep-opt {
+    width: 42px; height: 42px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--bg3);
+    font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.12s;
+  }
+  .ep-opt.selected { border-color: var(--gold); background: rgba(201,168,76,0.12); }
+  .ep-opt:active { transform: scale(0.88); }
+
+  .btn-primary {
+    width: 100%; height: 48px; background: var(--gold);
+    color: #0f0e0c; border: none; border-radius: var(--radius-sm);
+    font-family: var(--font-sans); font-size: 15px; font-weight: 500;
+    cursor: pointer; transition: opacity 0.15s; margin-top: 4px;
+  }
+  .btn-primary:active { opacity: 0.8; }
+
+  /* ── History ── */
+  .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .hist-title { font-size: 17px; font-weight: 600; color: var(--gold2); }
+  .btn-clear { font-size: 12px; color: var(--red); background: rgba(217,79,79,0.1); border: 1px solid rgba(217,79,79,0.25); border-radius: 20px; padding: 4px 12px; cursor: pointer; font-family: var(--font-sans); transition: all 0.15s; }
+  .btn-clear:hover { background: rgba(217,79,79,0.2); }
+  .hist-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+  .dot-use    { background: var(--red); }
+  .dot-refill { background: var(--green); }
+  .dot-add    { background: var(--gold); }
+  .dot-edit   { background: var(--gold2); }
+  .dot-del    { background: var(--text3); }
+  .hist-body  { flex: 1; }
+  .hist-main  { font-size: 14px; color: var(--text); line-height: 1.4; }
+  .hist-desc  { font-size: 12px; color: var(--text2); margin-top: 3px; font-style: italic; }
+  .hist-time  { font-size: 11px; color: var(--text3); flex-shrink: 0; text-align: right; line-height: 1.4; }
+  .hist-empty { text-align: center; padding: 40px 0; color: var(--text3); font-size: 14px; }
+
+  /* ── Modals ── */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 200; align-items: flex-end; justify-content: center; }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 20px 20px 0 0; padding: 20px 20px 36px;
+    width: 100%; max-width: 480px;
+    animation: slideUp 0.22s ease;
+    max-height: 92vh; overflow-y: auto;
+  }
+  @keyframes slideUp { from { transform: translateY(40px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+  .modal-handle { width: 36px; height: 4px; background: var(--border2); border-radius: 2px; margin: 0 auto 16px; }
+  .modal-title { font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+  .modal-sub   { font-size: 13px; color: var(--text3); margin-bottom: 16px; }
+  .modal-ml    { font-size: 28px; font-weight: 600; color: var(--gold); margin-bottom: 16px; }
+  .modal-ml span { font-size: 14px; font-weight: 400; color: var(--text3); }
+  .quick-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .qb { padding: 6px 14px; border: 1px solid var(--border2); border-radius: 20px; font-size: 13px; cursor: pointer; background: var(--bg3); color: var(--text2); font-family: var(--font-sans); transition: all 0.12s; }
+  .qb:hover, .qb.sel { border-color: var(--gold); color: var(--gold); background: rgba(201,168,76,0.1); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .btn-modal-cancel { flex: 1; height: 48px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm); font-size: 15px; color: var(--text2); cursor: pointer; font-family: var(--font-sans); }
+  .btn-modal-ok { flex: 2; height: 48px; background: var(--gold); color: #0f0e0c; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 500; cursor: pointer; font-family: var(--font-sans); transition: opacity 0.15s; }
+  .btn-modal-ok:active { opacity: 0.8; }
+  .btn-modal-ok.green { background: var(--green); color: #fff; }
+  .btn-modal-ok.red   { background: var(--red);   color: #fff; }
+  .modal-warn { font-size: 14px; color: var(--text2); line-height: 1.6; margin-bottom: 4px; }
+  .version { font-size: 10px; color: var(--text3); background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px; margin-left: 8px; vertical-align: middle; }
+
+  /* ── Filter & Sort bar ── */
+  .controls-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .ctrl-select {
+    flex: 1; height: 36px; background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text2); font-family: var(--font-sans);
+    font-size: 13px; padding: 0 10px; appearance: none; -webkit-appearance: none; cursor: pointer;
+  }
+  .ctrl-select:focus { outline: none; border-color: var(--gold); color: var(--text); }
+  .ctrl-select option { background: #242320; color: #f0ece2; }
+  .ctrl-select.active { border-color: var(--gold); color: var(--gold); background: rgba(201,168,76,0.08); }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  /* ── Adega ── */
+  .adega-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .adega-title  { font-size: 17px; font-weight: 600; color: var(--gold2); }
+  .adega-filter { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .adega-filter::-webkit-scrollbar { display: none; }
+  .adega-filt-btn {
+    padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    border: 1px solid var(--border2); background: var(--bg3); color: var(--text3);
+    cursor: pointer; font-family: var(--font-sans); transition: all 0.15s;
+  }
+  .adega-filt-btn.active { background: var(--gold); border-color: var(--gold); color: #000; }
+
+  .cellar-grid { display: flex; flex-direction: column; gap: 12px; }
+  .cellar-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .cellar-card:active { border-color: var(--gold); }
+  .cellar-card-inner { display: flex; gap: 12px; padding: 14px; align-items: flex-start; }
+  .cellar-img {
+    width: 64px; height: 80px; border-radius: 8px; object-fit: cover;
+    background: var(--bg3); flex-shrink: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 28px; border: 1px solid var(--border);
+  }
+  .cellar-img img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+  .cellar-info { flex: 1; min-width: 0; }
+  .cellar-name { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cellar-producer { font-size: 12px; color: var(--text3); margin-top: 1px; }
+  .cellar-type-badge {
+    display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 8px;
+    border-radius: 20px; border: 1px solid; margin-top: 5px;
+  }
+  .type-vinho-tinto   { color: #b05c7a; border-color: rgba(176,92,122,0.35); background: rgba(176,92,122,0.1); }
+  .type-vinho-branco  { color: #b8a830; border-color: rgba(184,168,48,0.35); background: rgba(184,168,48,0.1); }
+  .type-vinho-rose    { color: #d4748c; border-color: rgba(212,116,140,0.35); background: rgba(212,116,140,0.1); }
+  .type-espumante     { color: var(--gold2); border-color: rgba(226,192,106,0.35); background: rgba(226,192,106,0.1); }
+  .type-cerveja       { color: #c87832; border-color: rgba(200,120,50,0.35); background: rgba(200,120,50,0.1); }
+  .type-whisky        { color: #c8a060; border-color: rgba(200,160,96,0.35); background: rgba(200,160,96,0.1); }
+  .cellar-meta { display: flex; gap: 12px; margin-top: 8px; align-items: center; }
+  .cellar-score { font-size: 20px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .cellar-score-lbl { font-size: 10px; color: var(--text3); }
+  .cellar-buys { font-size: 12px; color: var(--text2); }
+
+  .cellar-empty { text-align: center; padding: 50px 20px; font-size: 14px; color: var(--text3); line-height: 1.7; }
+  .cellar-empty .big { font-size: 40px; margin-bottom: 12px; }
+
+  /* Adega detail modal */
+  .modal-full {
+    background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 20px 20px 0 0; padding: 0;
+    width: 100%; max-width: 480px;
+    animation: slideUp 0.22s ease;
+    max-height: 95vh; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .modal-full-header {
+    padding: 20px 20px 0;
+    position: sticky; top: 0; background: var(--bg2);
+    z-index: 10; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-full-body { padding: 20px; padding-bottom: 36px; }
+  .detail-hero { display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start; }
+  .detail-img {
+    width: 90px; height: 112px; border-radius: 10px; object-fit: cover;
+    background: var(--bg3); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; flex-shrink: 0; cursor: pointer; overflow: hidden;
+  }
+  .detail-img img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+  .detail-img-hint { font-size: 10px; color: var(--text3); text-align: center; margin-top: 4px; }
+  .detail-meta { flex: 1; }
+  .detail-name-input {
+    width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border2);
+    color: var(--text); font-size: 17px; font-weight: 600; font-family: var(--font-sans);
+    padding: 4px 0; margin-bottom: 6px;
+  }
+  .detail-name-input:focus { outline: none; border-color: var(--gold); }
+
+  .score-display {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px; text-align: center;
+  }
+  .score-big { font-size: 48px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .score-label { font-size: 12px; color: var(--text3); margin-top: 4px; }
+  .score-desc { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .score-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: center; }
+  .score-btn {
+    padding: 6px 16px; border-radius: 20px; font-size: 12px; font-family: var(--font-sans);
+    cursor: pointer; transition: all 0.15s; font-weight: 500;
+  }
+  .score-btn-auto { background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.4); color: var(--gold); }
+  .score-btn-manual { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); }
+
+  .params-section { margin-bottom: 16px; }
+  .params-title { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
+  .param-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .param-label { font-size: 13px; color: var(--text2); width: 130px; flex-shrink: 0; }
+  .param-slider { flex: 1; height: 4px; cursor: pointer; accent-color: var(--gold); }
+  .param-val { font-size: 13px; color: var(--gold); font-weight: 600; width: 28px; text-align: right; flex-shrink: 0; }
+
+  .buys-section { margin-bottom: 16px; }
+  .buys-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .buys-lbl { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; }
+  .btn-add-buy {
+    font-size: 12px; color: var(--gold); background: rgba(201,168,76,0.1);
+    border: 1px solid rgba(201,168,76,0.3); border-radius: 20px;
+    padding: 4px 12px; cursor: pointer; font-family: var(--font-sans);
+  }
+  .buy-item {
+    background: var(--bg3); border-radius: var(--radius-sm);
+    padding: 10px 12px; margin-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .buy-item-main { font-size: 13px; color: var(--text); }
+  .buy-item-sub  { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .buy-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 16px; padding: 0 4px; }
+
+  /* buy form inside modal */
+  .buy-form {
+    background: var(--bg3); border: 1px dashed var(--border2);
+    border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px;
+  }
+  .buy-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+  .buy-form .field { margin-bottom: 0; }
+
+  .review-area textarea {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text); font-family: var(--font-sans);
+    font-size: 14px; padding: 10px 12px; min-height: 90px; resize: none; line-height: 1.6;
+  }
+  .review-area textarea:focus { outline: none; border-color: var(--gold); }
+  .review-area textarea::placeholder { color: var(--text3); }
+
+  .refill-link-banner {
+    background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25);
+    border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px;
+    font-size: 13px; color: var(--gold2); display: flex; justify-content: space-between; align-items: center;
+  }
+  .refill-link-btn {
+    font-size: 12px; background: var(--gold); color: #000; border: none;
+    border-radius: 20px; padding: 4px 12px; cursor: pointer; font-family: var(--font-sans); font-weight: 500;
+  }
+  /* ── Drinks ── */
+  .drinks-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+  .drink-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 8px 10px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .drink-card:active { border-color: var(--gold); }
+  .drink-card-img {
+    width: 54px; height: 54px; border-radius: 10px; object-fit: cover;
+    background: var(--bg3); margin-bottom: 7px; font-size: 26px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    border: 1px solid var(--border); flex-shrink: 0;
+  }
+  .drink-card-img img { width:100%;height:100%;object-fit:cover;border-radius:10px; }
+  .drink-card-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.3; margin-bottom: 3px; word-break: break-word; }
+  .drink-card-base { font-size: 10px; color: var(--text3); margin-bottom: 4px; }
+  .drink-stars { font-size: 11px; margin-bottom: 4px; color: var(--gold); letter-spacing: 1px; }
+  .drink-times { font-size: 10px; color: var(--text3); }
+  .drink-make-btn {
+    width: 100%; margin-top: 7px; padding: 5px 0;
+    background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 20px; color: var(--gold); font-size: 11px; font-weight: 500;
+    font-family: var(--font-sans); cursor: pointer; transition: all 0.15s;
+  }
+  .drink-make-btn:active { background: var(--gold); color: #000; }
+  .star-btn { font-size: 24px; cursor: pointer; background:none;border:none;padding:2px;transition:transform 0.1s;color:var(--gold); }
+  .star-btn:active { transform: scale(1.2); }
+  .ingredient-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .ingredient-row input { height:38px; }
+  .ingredient-row .ing-name { flex:2; }
+  .ingredient-row .ing-ml   { flex:1; }
+  .ingredient-row .ing-del  { width:32px;height:32px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+  .mk-row { margin-bottom:12px; }
+  .mk-row label { display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px; }
+  .mk-row .mk-desc { font-size:13px;color:var(--text2);margin-bottom:6px; }
+  .drinks-empty { text-align:center;padding:50px 20px;font-size:14px;color:var(--text3);line-height:1.7; }
+  .drinks-empty .big { font-size:40px;margin-bottom:12px; }
+</style>
+<body>
+
+<div class="top-bar">
+  <h1>Bar <span>em Casa</span> <span class="version">Beta 3</span></h1>
+  <div class="top-meta" id="top-meta"></div>
+</div>
+
+<!-- ESTOQUE -->
+<div class="section active" id="tab-estoque">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.6px;">Estoque</div>
+    <button class="btn-add-buy" style="font-size:13px;padding:5px 16px;" onclick="document.getElementById('modal-add-bottle').classList.add('open');buildEmojiPicker('emoji-picker',selectedEmoji,selectNewEmoji);">+ Garrafa</button>
+  </div>
+  <div class="stats-row" id="stats-row"></div>
+  <div class="controls-bar">
+    <select class="ctrl-select" id="filter-cat" onchange="applyControls()">
+      <option value="">Todos os tipos</option>
+      <option value="Gin">Gin</option>
+      <option value="Whisky">Whisky</option>
+      <option value="Rum">Rum</option>
+      <option value="Vodka">Vodka</option>
+      <option value="Cachaça">Cachaça</option>
+      <option value="Tequila">Tequila</option>
+      <option value="Vermute">Vermute</option>
+      <option value="Licor">Licor</option>
+      <option value="Bitter">Bitter</option>
+      <option value="Outro">Outro</option>
+    </select>
+    <select class="ctrl-select" id="sort-order" onchange="applyControls()">
+      <option value="custom">Ordem personalizada</option>
+      <option value="most-used">Mais usados</option>
+      <option value="fullest">Mais cheio → vazio</option>
+      <option value="emptiest">Mais vazio → cheio</option>
+    </select>
+  </div>
+  <div class="bottles-grid" id="bottles-grid"></div>
+</div>
+
+<!-- ADICIONAR -->
+<div class="section" id="tab-adicionar">
+  <div class="form-card">
+    <div class="form-title">Nova bebida</div>
+    <div class="field">
+      <label>Emoji da garrafa</label>
+      <div class="emoji-picker-row" id="emoji-picker"></div>
+    </div>
+    <div class="field">
+      <label>Nome da bebida</label>
+      <input type="text" id="new-name" placeholder="Ex: Hendrick's Gin" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label>Categoria</label>
+      <select id="new-category">
+        <option value="" disabled selected style="color:#6b6760">Selecione o tipo de bebida</option>
+        <option value="Gin">Gin</option>
+        <option value="Whisky">Whisky</option>
+        <option value="Rum">Rum</option>
+        <option value="Vodka">Vodka</option>
+        <option value="Cachaça">Cachaça</option>
+        <option value="Tequila">Tequila</option>
+        <option value="Vermute">Vermute</option>
+        <option value="Licor">Licor</option>
+        <option value="Bitter">Bitter</option>
+        <option value="Cerveja">Cerveja</option>
+        <option value="Vinho">Vinho</option>
+        <option value="Espumante">Espumante</option>
+        <option value="Outro">Outro</option>
+      </select>
+    </div>
+    <div class="field field-row">
+      <div class="field">
+        <label>Volume total (ml)</label>
+        <input type="number" id="new-total" placeholder="750" min="1" inputmode="numeric" />
+      </div>
+      <div class="field">
+        <label>Volume atual (ml)</label>
+        <input type="number" id="new-current" placeholder="Cheio" min="0" inputmode="numeric" />
+      </div>
+    </div>
+    <button class="btn-primary" onclick="addBottle()">Adicionar ao estoque</button>
+  </div>
+</div>
+
+<!-- HISTÓRICO -->
+<div class="section" id="tab-historico">
+  <div class="hist-header">
+    <div class="hist-title">Histórico</div>
+    <button class="btn-clear" onclick="confirmClearHistory()">Limpar tudo</button>
+  </div>
+  <div id="history-list"></div>
+</div>
+
+<!-- DRINKS -->
+<div class="section" id="tab-drinks">
+  <div class="adega-header">
+    <div class="adega-title">Drinks</div>
+    <button class="btn-add-buy" style="font-size:13px;padding:5px 14px;" onclick="openNewDrink()">+ Drink</button>
+  </div>
+  <div class="controls-bar" style="margin-bottom:8px;">
+    <select class="ctrl-select" id="drinks-filter-sel" onchange="setDrinkFilterSel(this)">
+      <option value="">Todos os tipos</option>
+      <option value="Gin">Gin</option>
+      <option value="Whisky">Whisky</option>
+      <option value="Rum">Rum</option>
+      <option value="Vodka">Vodka</option>
+      <option value="Cachaça">Cachaça</option>
+      <option value="Tequila">Tequila</option>
+      <option value="Vermute">Vermute</option>
+      <option value="Bitter">Bitter</option>
+      <option value="Licor">Licor</option>
+      <option value="Soju">Soju</option>
+      <option value="Sem álcool">Sem álcool</option>
+      <option value="Outro">Outro</option>
+    </select>
+    <button class="ctrl-select" id="drink-sort-btn" onclick="toggleDrinkSort()" style="width:auto;padding:0 14px;font-size:12px;cursor:pointer;white-space:nowrap;">
+      Mais feitos ↑
+    </button>
+  </div>
+  <div class="drinks-grid" id="drinks-grid"></div>
+</div>
+
+<!-- ADEGA -->
+<div class="section" id="tab-adega">
+  <div class="adega-header">
+    <div class="adega-title">Adega</div>
+    <button class="btn-add-buy" style="font-size:13px;padding:5px 14px;" onclick="openNewLabel()">+ Rótulo</button>
+  </div>
+  <div class="adega-filter" id="adega-filter">
+    <button class="adega-filt-btn active" data-f="" onclick="setAdeFilter(this,'')">Todos</button>
+    <button class="adega-filt-btn" data-f="vinho-tinto" onclick="setAdeFilter(this,'vinho-tinto')">🍷 Tinto</button>
+    <button class="adega-filt-btn" data-f="vinho-branco" onclick="setAdeFilter(this,'vinho-branco')">🥂 Branco</button>
+    <button class="adega-filt-btn" data-f="vinho-rose" onclick="setAdeFilter(this,'vinho-rose')">🌸 Rosé</button>
+    <button class="adega-filt-btn" data-f="espumante" onclick="setAdeFilter(this,'espumante')">✨ Espumante</button>
+    <button class="adega-filt-btn" data-f="cerveja" onclick="setAdeFilter(this,'cerveja')">🍺 Cerveja</button>
+    <button class="adega-filt-btn" data-f="whisky" onclick="setAdeFilter(this,'whisky')">🥃 Whisky</button>
+  </div>
+  <div class="cellar-grid" id="cellar-grid"></div>
+</div>
+
+<div id="toast"></div>
+
+<!-- NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" onclick="switchTab('estoque', this)">
+    <span class="nav-icon">🍶</span>Estoque
+  </button>
+  <button class="nav-btn" onclick="switchTab('drinks', this)">
+    <span class="nav-icon">🍸</span>Drinks
+  </button>
+  <button class="nav-btn" onclick="switchTab('adega', this)">
+    <span class="nav-icon">🍷</span>Adega
+  </button>
+  <button class="nav-btn" onclick="switchTab('historico', this)">
+    <span class="nav-icon">📋</span>Histórico
+  </button>
+</nav>
+
+<!-- MODAL: USO -->
+<div class="overlay" id="modal-use">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="u-name"></div>
+    <div class="modal-sub" id="u-cat"></div>
+    <div class="modal-ml" id="u-ml"></div>
+    <div class="quick-btns" id="u-quick"></div>
+    <div class="field">
+      <label>Quantidade usada (ml)</label>
+      <input type="number" id="u-amount" placeholder="ml" min="1" inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label>Descrição (opcional)</label>
+      <textarea id="u-desc" placeholder="Ex: Gin Tônica, 2 doses pro João..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-modal-ok" onclick="confirmUse()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: REABASTECIMENTO -->
+<div class="overlay" id="modal-refill">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="r-name"></div>
+    <div class="modal-sub" id="r-cat"></div>
+    <div class="divider"></div>
+    <div class="field">
+      <label>Novo volume total da garrafa (ml)</label>
+      <input type="number" id="r-total" placeholder="750" min="1" inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label>Descrição (opcional)</label>
+      <textarea id="r-desc" placeholder="Ex: Garrafa nova, comprei na adega..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-modal-ok green" onclick="confirmRefill()">Reabastecer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EDITAR -->
+<div class="overlay" id="modal-edit">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Editar garrafa</div>
+    <div class="divider"></div>
+    <div class="field">
+      <label>Emoji da garrafa</label>
+      <div class="emoji-picker-row" id="edit-emoji-picker"></div>
+    </div>
+    <div class="field">
+      <label>Nome da bebida</label>
+      <input type="text" id="e-name" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label>Categoria</label>
+      <select id="e-category">
+        <option value="Gin">Gin</option>
+        <option value="Whisky">Whisky</option>
+        <option value="Rum">Rum</option>
+        <option value="Vodka">Vodka</option>
+        <option value="Cachaça">Cachaça</option>
+        <option value="Tequila">Tequila</option>
+        <option value="Vermute">Vermute</option>
+        <option value="Licor">Licor</option>
+        <option value="Bitter">Bitter</option>
+        <option value="Cerveja">Cerveja</option>
+        <option value="Vinho">Vinho</option>
+        <option value="Espumante">Espumante</option>
+        <option value="Outro">Outro</option>
+      </select>
+    </div>
+    <div class="field field-row">
+      <div class="field">
+        <label>Volume total (ml)</label>
+        <input type="number" id="e-total" min="1" inputmode="numeric" />
+      </div>
+      <div class="field">
+        <label>Volume atual (ml)</label>
+        <input type="number" id="e-current" min="0" inputmode="numeric" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-modal-ok" onclick="confirmEdit()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DELETE -->
+<div class="overlay" id="modal-delete">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="d-name"></div>
+    <div class="modal-sub" id="d-cat"></div>
+    <div class="divider"></div>
+    <p class="modal-warn">Tem certeza que deseja remover esta bebida do estoque? O histórico será mantido.</p>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-modal-ok red" onclick="confirmDelete()">Remover</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: LIMPAR HISTÓRICO -->
+<div class="overlay" id="modal-clear">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Limpar histórico</div>
+    <div class="divider"></div>
+    <p class="modal-warn">Todos os registros serão apagados permanentemente.</p>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-modal-ok red" onclick="doClearHistory()">Limpar tudo</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADEGA DETALHE / EDIÇÃO -->
+<div class="overlay" id="modal-label">
+  <div class="modal modal-full">
+    <div class="modal-full-header">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="modal-title" id="ml-title">Rótulo</div>
+        <div style="display:flex;gap:6px;">
+          <button class="icon-btn del" onclick="confirmDeleteLabel()" title="Remover rótulo permanentemente" style="font-size:13px;">🗑</button>
+          <button class="icon-btn" onclick="closeLabelModal()" title="Fechar" style="font-size:18px;">×</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-full-body">
+
+      <!-- Imagem + campos base -->
+      <div class="detail-hero">
+        <div>
+          <div class="detail-img" id="ml-img-preview" onclick="triggerImgUpload()">📷</div>
+          <div class="detail-img-hint">Toque para alterar</div>
+          <input type="file" id="ml-img-input" accept="image/*" style="display:none" onchange="handleImgUpload(event)" />
+        </div>
+        <div class="detail-meta" style="flex:1;min-width:0;">
+          <div class="field" style="margin-bottom:10px;">
+            <label>Nome do rótulo</label>
+            <input type="text" id="ml-name" placeholder="Ex: Château Margaux" autocomplete="off" />
+          </div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>Produtor / Cervejaria / Destilaria</label>
+            <input type="text" id="ml-producer" placeholder="Ex: Château Margaux" autocomplete="off" />
+          </div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>Tipo</label>
+            <select id="ml-type" onchange="onLabelTypeChange()">
+              <option value="vinho-tinto">🍷 Vinho Tinto</option>
+              <option value="vinho-branco">🥂 Vinho Branco</option>
+              <option value="vinho-rose">🌸 Vinho Rosé</option>
+              <option value="espumante">✨ Espumante</option>
+              <option value="cerveja">🍺 Cerveja</option>
+              <option value="whisky">🥃 Whisky</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>País / Região</label>
+            <input type="text" id="ml-region" placeholder="Ex: Bordeaux, França" autocomplete="off" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Nota -->
+      <div class="score-display">
+        <div class="score-big" id="ml-score-display">—</div>
+        <div class="score-label" id="ml-score-desc">Nenhuma avaliação ainda</div>
+        <div class="score-actions">
+          <button class="score-btn score-btn-auto" onclick="calcAutoScore()">Calcular automaticamente</button>
+          <button class="score-btn score-btn-manual" onclick="toggleManualScore()">Nota manual</button>
+        </div>
+        <div id="ml-manual-score-wrap" style="display:none;margin-top:12px;">
+          <input type="number" id="ml-manual-score" min="0" max="100" placeholder="0–100"
+            style="width:100%;height:40px;padding:0 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-sans);font-size:18px;text-align:center;"
+            oninput="onManualScoreInput()" />
+        </div>
+      </div>
+
+      <!-- Parâmetros (dinâmicos por tipo) -->
+      <div class="params-section">
+        <div class="params-title" id="params-title">Avaliação</div>
+        <div id="params-container"></div>
+      </div>
+
+      <!-- Compras -->
+      <div class="buys-section">
+        <div class="buys-header">
+          <div class="buys-lbl">Histórico de compras</div>
+          <button class="btn-add-buy" onclick="toggleBuyForm()">+ Registrar compra</button>
+        </div>
+        <div id="buy-form-wrap" style="display:none;">
+          <div class="buy-form">
+            <div class="buy-form-row">
+              <div class="field">
+                <label>Data da compra</label>
+                <input type="date" id="buy-date" />
+              </div>
+              <div class="field">
+                <label id="buy-vintage-lbl">Safra / Ano</label>
+                <input type="text" id="buy-vintage" placeholder="Ex: 2021" />
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:8px;">
+              <label>Observação (opcional)</label>
+              <input type="text" id="buy-note" placeholder="Ex: Comprei na viagem a Mendoza" />
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-modal-cancel" style="flex:1;height:36px;font-size:13px;" onclick="toggleBuyForm()">Cancelar</button>
+              <button class="btn-modal-ok" style="flex:2;height:36px;font-size:13px;" onclick="addBuy()">Registrar</button>
+            </div>
+          </div>
+        </div>
+        <div id="buys-list"></div>
+      </div>
+
+      <!-- Review -->
+      <div class="review-area">
+        <div class="params-title" style="margin-bottom:8px;">Review pessoal</div>
+        <textarea id="ml-review" placeholder="Suas impressões, combinações, ocasião..."></textarea>
+      </div>
+
+      <!-- Vínculo com estoque (só para whisky) -->
+      <div id="refill-link-wrap" style="display:none;margin-top:16px;">
+        <div class="refill-link-banner">
+          <span>Vincular ao estoque para contar reposições automaticamente</span>
+          <button class="refill-link-btn" onclick="openLinkStockModal()">Vincular</button>
+        </div>
+        <div id="linked-bottle-info"></div>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn-modal-cancel" onclick="closeLabelModal()">Fechar</button>
+        <button class="btn-modal-ok" onclick="saveLabel()">Salvar rótulo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADICIONAR GARRAFA -->
+<div class="overlay" id="modal-add-bottle">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nova garrafa</div>
+    <div class="divider"></div>
+    <div class="field">
+      <label>Emoji da garrafa</label>
+      <div class="emoji-picker-row" id="emoji-picker"></div>
+    </div>
+    <div class="field">
+      <label>Nome da bebida</label>
+      <input type="text" id="new-name" placeholder="Ex: Hendrick's Gin" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label>Categoria</label>
+      <select id="new-category">
+        <option value="" disabled selected style="color:#6b6760">Selecione o tipo de bebida</option>
+        <option value="Gin">Gin</option>
+        <option value="Whisky">Whisky</option>
+        <option value="Rum">Rum</option>
+        <option value="Vodka">Vodka</option>
+        <option value="Cachaça">Cachaça</option>
+        <option value="Tequila">Tequila</option>
+        <option value="Vermute">Vermute</option>
+        <option value="Licor">Licor</option>
+        <option value="Bitter">Bitter</option>
+        <option value="Outro">Outro</option>
+      </select>
+    </div>
+    <div class="field field-row">
+      <div class="field">
+        <label>Volume total (ml)</label>
+        <input type="number" id="new-total" placeholder="750" min="1" inputmode="numeric" />
+      </div>
+      <div class="field">
+        <label>Volume atual (ml)</label>
+        <input type="number" id="new-current" placeholder="Cheio" min="0" inputmode="numeric" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-modal-ok" onclick="addBottle()">Adicionar ao estoque</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DRINK DETALHE / EDIÇÃO -->
+<div class="overlay" id="modal-drink">
+  <div class="modal modal-full">
+    <div class="modal-full-header">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="modal-title" id="dk-title">Drink</div>
+        <div style="display:flex;gap:6px;">
+          <button class="icon-btn del" onclick="confirmDeleteDrink()" title="Remover drink permanentemente" style="font-size:13px;">🗑</button>
+          <button class="icon-btn" onclick="closeDrinkModal()" title="Fechar" style="font-size:18px;">×</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-full-body">
+      <!-- Imagem + nome -->
+      <div class="detail-hero">
+        <div>
+          <div class="detail-img" id="dk-img-preview" onclick="triggerDrinkImgUpload()">🍸</div>
+          <div class="detail-img-hint">Toque para foto</div>
+          <input type="file" id="dk-img-input" accept="image/*" style="display:none" onchange="handleDrinkImgUpload(event)" />
+        </div>
+        <div class="detail-meta" style="flex:1;min-width:0;">
+          <div class="field" style="margin-bottom:10px;">
+            <label>Nome do drink</label>
+            <input type="text" id="dk-name" placeholder="Ex: Gin Tônica" autocomplete="off" />
+          </div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>Base alcoólica principal</label>
+            <select id="dk-base">
+              <option value="Gin">Gin</option>
+              <option value="Whisky">Whisky</option>
+              <option value="Rum">Rum</option>
+              <option value="Vodka">Vodka</option>
+              <option value="Cachaça">Cachaça</option>
+              <option value="Tequila">Tequila</option>
+              <option value="Bitter">Bitter</option>
+              <option value="Vermute">Vermute</option>
+              <option value="Licor">Licor</option>
+              <option value="Soju">Soju</option>
+              <option value="Sem álcool">Sem álcool</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="font-size:12px;color:var(--text3);">Vezes feito:</div>
+            <div id="dk-times-made" style="font-size:16px;font-weight:600;color:var(--gold);">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Avaliação -->
+      <div class="score-display" style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:center;gap:6px;margin-bottom:8px;" id="dk-stars-row"></div>
+        <div class="score-desc" id="dk-stars-desc" style="font-size:12px;color:var(--text3);text-align:center;"></div>
+        <div class="params-section" style="margin-top:12px;margin-bottom:0;">
+          <div class="params-title">Parâmetros de avaliação</div>
+          <div id="dk-params"></div>
+        </div>
+      </div>
+
+      <!-- Ingredientes -->
+      <div class="buys-section">
+        <div class="buys-header">
+          <div class="buys-lbl">Ingredientes</div>
+          <button class="btn-add-buy" onclick="addIngredientRow()">+ Ingrediente</button>
+        </div>
+        <div id="dk-ingredients-list"></div>
+      </div>
+
+      <!-- Modo de preparo -->
+      <div class="review-area" style="margin-bottom:16px;">
+        <div class="params-title" style="margin-bottom:8px;">Modo de preparo</div>
+        <textarea id="dk-method" placeholder="Ex: Encher copo com gelo, adicionar gin, completar com tônica gelada, garnish de limão siciliano..."></textarea>
+      </div>
+
+      <!-- Review -->
+      <div class="review-area">
+        <div class="params-title" style="margin-bottom:8px;">Review pessoal</div>
+        <textarea id="dk-review" placeholder="Impressões, harmonizações, ocasiões ideais..."></textarea>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn-modal-cancel" onclick="closeDrinkModal()">Fechar</button>
+        <button class="btn-modal-ok" onclick="saveDrink()">Salvar drink</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: FAZER DRINK (escolher garrafas) -->
+<div class="overlay" id="modal-make-drink">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="mk-title">Fazer drink</div>
+    <div class="modal-sub">Selecione qual garrafa usar para cada ingrediente alcoólico:</div>
+    <div class="divider"></div>
+    <div id="mk-ingredient-selects"></div>
+    <div class="divider"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div style="font-size:13px;color:var(--text2);">Quantas doses?</div>
+      <div style="display:flex;align-items:center;gap:0;">
+        <button onclick="changeMakeQty(-1)" style="width:36px;height:36px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+        <div id="mk-qty" style="width:36px;text-align:center;font-size:18px;font-weight:600;color:var(--gold);">1</div>
+        <button onclick="changeMakeQty(1)" style="width:36px;height:36px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Os ml serão multiplicados pela quantidade.</div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-modal-ok green" onclick="confirmMakeDrink()">Descontar do estoque</button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="modal-link-stock">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Vincular ao estoque</div>
+    <div class="modal-sub">Escolha qual garrafa do estoque representa este rótulo. Ao reabastecer no estoque, a compra será contada aqui automaticamente.</div>
+    <div class="divider"></div>
+    <div class="field">
+      <label>Garrafa no estoque</label>
+      <select id="link-bottle-select"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="document.getElementById('modal-link-stock').classList.remove('open')">Cancelar</button>
+      <button class="btn-modal-ok" onclick="confirmLinkStock()">Vincular</button>
+    </div>
+  </div>
+</div>
+<script>
+const EMOJIS = [
+  '🍾','🥃','🫙','🍸','🍹','🍷','🥂','🍊','🌵','🍋',
+  '🍒','🫐','🌿','🍫','🧊','🫧','🍶','🧃','🫚','⭐',
+  '🧉','🍺','🍻','🥛','🫖','☕','🍵','🥤','🍓','🍌',
+  '🍍','🥭','🍑','🍈','🫒','🌶️','🥥','🍏','🍎','🫁',
+  '🪴','🌺','🌸','🌼','🍀','🪸','💎','🔮','🪄','✨'
+];
+const DEFAULT_EMOJI = '🍾';
+
+let bottles = [];
+let history = [];
+let cellar  = [];
+let drinks  = [];
+let activeId          = null;
+let activeLabelId     = null;
+let selectedEmoji     = DEFAULT_EMOJI;
+let editSelectedEmoji = DEFAULT_EMOJI;
+let useCount          = {};
+let emptyCount        = {};
+let _saveTimer        = null;
+let _adeFilter        = '';
+let _labelImg         = null;
+let _labelIsNew       = false;
+
+// ── Persistência ──────────────────────────────────────
+async function loadData(){
+  try {
+    const r = await fetch('/dados');
+    if(!r.ok) throw new Error();
+    const d = await r.json();
+    bottles    = d.bottles    || [];
+    history    = d.history    || [];
+    useCount   = d.useCount   || {};
+    emptyCount = d.emptyCount || {};
+    cellar     = d.cellar     || [];
+    drinks     = d.drinks     || [];
+    if(!d.emptyCount) recalcEmptyCount();
+  } catch(e){
+    showToast('⚠️ Servidor não encontrado — rode servidor.py', true);
+  }
+}
+
+function saveData(){
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(async ()=>{
+    try {
+      const r = await fetch('/dados',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({bottles, history, useCount, emptyCount, cellar, drinks})
+      });
+      if(!r.ok) throw new Error();
+      showToast('Salvo ✓');
+    } catch(e){
+      showToast('Erro ao salvar — servidor offline?', true);
+    }
+  }, 400);
+}
+
+function recalcEmptyCount(){
+  emptyCount = {};
+  history.forEach(h=>{
+    if(h.type==='use' && h.remaining===0){
+      const b = bottles.find(x=>x.name===h.name);
+      const key = b ? String(b.id) : 'nome:'+h.name;
+      emptyCount[key] = (emptyCount[key]||0) + 1;
+    }
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────
+function fmtTs(d){
+  return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+    +'\n'+d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+}
+function now(){ return fmtTs(new Date()); }
+function pct(b){ return b.total>0 ? Math.round(b.current/b.total*100) : 0; }
+function fillClass(b){
+  if(b.current===0) return 'fill-empty';
+  const p=pct(b); return p>50?'fill-high':p>20?'fill-mid':'fill-low';
+}
+
+// ── Toast ─────────────────────────────────────────────
+let _toastTimer;
+function showToast(msg, isError=false){
+  const t=document.getElementById('toast');
+  clearTimeout(_toastTimer);
+  t.textContent=msg;
+  t.style.background=isError?'var(--red)':'var(--green)';
+  t.classList.add('show');
+  _toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+// ── Render ────────────────────────────────────────────
+function renderAll(){ renderMeta(); renderStats(); renderGrid(); }
+
+function renderMeta(){
+  const low  =bottles.filter(b=>pct(b)<=20&&b.current>0).length;
+  const empty=bottles.filter(b=>b.current===0).length;
+  let html=`<span class="chip">${bottles.length} garrafa${bottles.length!==1?'s':''}</span>`;
+  if(empty>0) html+=`<span class="chip warn">${empty} esgotada${empty!==1?'s':''}</span>`;
+  if(low>0)   html+=`<span class="chip warn">${low} estoque baixo</span>`;
+  document.getElementById('top-meta').innerHTML=html;
+}
+
+function renderStats(){
+  const totalMl=bottles.reduce((s,b)=>s+b.current,0);
+  const empty  =bottles.filter(b=>b.current===0).length;
+  const low    =bottles.filter(b=>pct(b)<=20&&b.current>0).length;
+  document.getElementById('stats-row').innerHTML=`
+    <div class="stat"><div class="stat-val">${bottles.length}</div><div class="stat-lbl">garrafas</div></div>
+    <div class="stat"><div class="stat-val">${totalMl} ml</div><div class="stat-lbl">em estoque</div></div>
+    <div class="stat">
+      <div class="stat-val" style="color:${empty>0?'var(--red)':low>0?'var(--amber)':'var(--green)'}">
+        ${empty>0?empty:low>0?low:'ok'}
+      </div>
+      <div class="stat-lbl">${empty>0?'esgotada'+(empty!==1?'s':''):low>0?'baixa'+(low!==1?'s':''):'tudo certo'}</div>
+    </div>`;
+}
+
+function getDisplayList(){
+  const filterCat = document.getElementById('filter-cat')?.value || '';
+  const sortOrder = document.getElementById('sort-order')?.value || 'custom';
+
+  // Update active styling on selects
+  const fc=document.getElementById('filter-cat'), so=document.getElementById('sort-order');
+  if(fc) fc.classList.toggle('active', fc.value!=='');
+  if(so) so.classList.toggle('active', so.value!=='custom');
+
+  let list = [...bottles];
+  if(filterCat) list=list.filter(b=>b.category===filterCat);
+
+  if(sortOrder==='most-used'){
+    list.sort((a,b)=>(useCount[b.id]||0)-(useCount[a.id]||0));
+  } else if(sortOrder==='fullest'){
+    list.sort((a,b)=>pct(b)-pct(a));
+  } else if(sortOrder==='emptiest'){
+    list.sort((a,b)=>pct(a)-pct(b));
+  }
+  // 'custom' = keep bottles array order
+  return list;
+}
+
+function renderGrid(){
+  const grid=document.getElementById('bottles-grid');
+  const list=getDisplayList();
+
+  if(!bottles.length){
+    grid.innerHTML='<div class="empty-state"><div class="big">🍹</div>Nenhuma bebida cadastrada.<br>Vá em <strong>Adicionar</strong> para começar!</div>';
+    return;
+  }
+  if(!list.length){
+    grid.innerHTML='<div class="empty-state">Nenhuma bebida encontrada<br>para o filtro selecionado.</div>';
+    return;
+  }
+
+  grid.innerHTML=list.map(b=>{
+    const p=pct(b), isEmpty=b.current===0, isLow=p<=20&&!isEmpty;
+    let badges='';
+    if(isEmpty) badges='<span class="badge badge-empty">Esgotado</span>';
+    else if(isLow) badges='<span class="badge badge-low">Estoque baixo</span>';
+    const useFootBtn = isEmpty?'':
+      `<button class="use-foot-btn" onclick="openUse(${b.id})">Usar</button>`;
+    const refillBtn=isEmpty?
+      `<button class="icon-btn refill" onclick="openRefill(${b.id})" title="Reabastecer">↺</button>`:'';
+    const editBtn  =`<button class="icon-btn edit"   onclick="openEdit(${b.id})"    title="Editar">✎</button>`;
+    const delBtn   =`<button class="icon-btn del"    onclick="openDelete(${b.id})"  title="Remover">×</button>`;
+    return `<div class="bottle-card${isEmpty?' is-empty':isLow?' is-low':''}" data-id="${b.id}">
+      <div class="card-top">
+        <div class="drag-handle" title="Segurar e arrastar para reordenar">⠿</div>
+        <div class="card-emoji">${b.emoji||'🍾'}</div>
+        <div class="card-info">
+          <div class="card-name">${b.name}</div>
+          <div class="card-cat">${b.category}</div>
+          ${badges?`<div class="card-badges">${badges}</div>`:''}
+        </div>
+        <div class="card-actions">${refillBtn}${editBtn}${delBtn}</div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill ${fillClass(b)}" style="width:${isEmpty?100:p}%"></div>
+      </div>
+      <div class="card-foot">
+        <div>
+          <span class="ml-current">${b.current} ml</span>
+          <span class="ml-of"> · ${isEmpty?'0':p}% de ${b.total} ml</span>
+        </div>
+        ${useFootBtn}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Only enable drag in custom order with no filter active
+  const sortOrder=document.getElementById('sort-order')?.value||'custom';
+  const filterCat=document.getElementById('filter-cat')?.value||'';
+  if(sortOrder==='custom'&&!filterCat) initDrag();
+}
+
+function applyControls(){ renderGrid(); }
+
+function renderHistory(){
+  const el=document.getElementById('history-list');
+  if(!history.length){ el.innerHTML='<div class="hist-empty">Nenhum evento registrado ainda.</div>'; return; }
+  el.innerHTML=[...history].reverse().slice(0,50).map(h=>{
+    let dot,main;
+    if(h.type==='use')     { dot='dot-use';    main=`<strong>${h.name}</strong> — usou ${h.amount} ml (restam ${h.remaining} ml)`; }
+    else if(h.type==='refill'){ dot='dot-refill'; main=`<strong>${h.name}</strong> — reabastecido com ${h.amount} ml`; }
+    else if(h.type==='add')   { dot='dot-add';    main=`<strong>${h.name}</strong> cadastrada (${h.amount} ml)`; }
+    else if(h.type==='edit')  { dot='dot-edit';   main=`<strong>${h.name}</strong> editada`; }
+    else                       { dot='dot-del';    main=`<strong>${h.name}</strong> removida do estoque`; }
+    const tl=h.time.split('\n');
+    return `<div class="hist-item">
+      <div class="hist-dot ${dot}"></div>
+      <div class="hist-body">
+        <div class="hist-main">${main}</div>
+        ${h.desc?`<div class="hist-desc">${h.desc}</div>`:''}
+      </div>
+      <div class="hist-time">${tl[0]}<br>${tl[1]||''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Emoji pickers ─────────────────────────────────────
+function buildEmojiPicker(containerId, current, onSelect){
+  document.getElementById(containerId).innerHTML=EMOJIS.map(e=>
+    `<button class="ep-opt${e===current?' selected':''}"
+      onclick="(${onSelect.toString()})('${e}','${containerId}')">${e}</button>`
+  ).join('');
+}
+function selectNewEmoji(e,cid){
+  selectedEmoji=e;
+  document.querySelectorAll(`#${cid} .ep-opt`).forEach(el=>el.classList.toggle('selected',el.textContent===e));
+}
+function selectEditEmoji(e,cid){
+  editSelectedEmoji=e;
+  document.querySelectorAll(`#${cid} .ep-opt`).forEach(el=>el.classList.toggle('selected',el.textContent===e));
+}
+
+// ── Tabs ──────────────────────────────────────────────
+function switchTab(tab,btn){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(tab==='historico') renderHistory();
+  if(tab==='adega') renderCellar();
+  if(tab==='drinks') renderDrinks();
+}
+
+// ── Add ───────────────────────────────────────────────
+function addBottle(){
+  const name    =document.getElementById('new-name').value.trim();
+  const category=document.getElementById('new-category').value;
+  const rawTotal=document.getElementById('new-total').value;
+  const rawCurr =document.getElementById('new-current').value;
+  if(!name){ alert('Preencha o nome da bebida!'); return; }
+  if(!category){ alert('Selecione o tipo de bebida!'); return; }
+  const total  =rawTotal===''||isNaN(parseInt(rawTotal))?750:parseInt(rawTotal);
+  const current=rawCurr===''||isNaN(parseInt(rawCurr))?total:Math.min(parseInt(rawCurr),total);
+  bottles.push({id:Date.now(),name,category,total,current,emoji:selectedEmoji});
+  history.push({type:'add',name,amount:current,remaining:current,desc:'',time:now()});
+  document.getElementById('new-name').value='';
+  document.getElementById('new-total').value='';
+  document.getElementById('new-current').value='';
+  selectedEmoji=DEFAULT_EMOJI;
+  buildEmojiPicker('emoji-picker',selectedEmoji,selectNewEmoji);
+  showToast('Garrafa adicionada ✓');
+  closeModals();
+  renderAll(); saveData();
+}
+
+// ── Modals ────────────────────────────────────────────
+function closeModals(){
+  document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open'));
+  activeId=null;
+}
+document.querySelectorAll('.overlay').forEach(o=>{
+  o.addEventListener('click',e=>{
+    if(e.target!==o) return;
+    if(o.id==='modal-drink') closeDrinkModal();
+    else if(o.id==='modal-label') closeLabelModal();
+    else closeModals();
+  });
+});
+
+// Uso
+function openUse(id){
+  const b=bottles.find(x=>x.id===id); if(!b) return;
+  activeId=id;
+  document.getElementById('u-name').textContent=b.emoji+' '+b.name;
+  document.getElementById('u-cat').textContent=b.category;
+  document.getElementById('u-ml').innerHTML=`${b.current} <span>ml restantes</span>`;
+  document.getElementById('u-amount').value='';
+  document.getElementById('u-desc').value='';
+  document.querySelectorAll('.qb').forEach(q=>q.classList.remove('sel'));
+  document.getElementById('modal-use').classList.add('open');
+}
+function setQb(v){
+  document.getElementById('u-amount').value=v;
+  document.querySelectorAll('.qb').forEach(q=>q.classList.toggle('sel',parseInt(q.dataset.v)===v));
+}
+document.getElementById('u-quick').innerHTML=[15,30,50,60,100].map(v=>
+  `<button class="qb" data-v="${v}" onclick="setQb(${v})">${v} ml</button>`
+).join('');
+
+function confirmUse(){
+  const amount=parseInt(document.getElementById('u-amount').value);
+  const desc  =document.getElementById('u-desc').value.trim();
+  if(!amount||amount<=0){ alert('Informe a quantidade em ml!'); return; }
+  const b=bottles.find(x=>x.id===activeId); if(!b) return;
+  if(amount>b.current){ alert(`Só restam ${b.current} ml nessa garrafa!`); return; }
+  b.current-=amount;
+  useCount[b.id]=(useCount[b.id]||0)+1;
+  history.push({type:'use',name:b.name,amount,remaining:b.current,desc,time:now()});
+  showToast('Uso registrado ✓');
+  closeModals(); renderAll(); saveData();
+}
+
+// Reabastecimento
+function openRefill(id){
+  const b=bottles.find(x=>x.id===id); if(!b) return;
+  activeId=id;
+  document.getElementById('r-name').textContent=b.emoji+' '+b.name;
+  document.getElementById('r-cat').textContent=b.category;
+  document.getElementById('r-total').value=b.total;
+  document.getElementById('r-desc').value='';
+  document.getElementById('modal-refill').classList.add('open');
+}
+function confirmRefill(){
+  const total=parseInt(document.getElementById('r-total').value);
+  const desc =document.getElementById('r-desc').value.trim();
+  if(!total||total<=0){ alert('Informe o volume da garrafa!'); return; }
+  const b=bottles.find(x=>x.id===activeId); if(!b) return;
+  b.total=total; b.current=total;
+  history.push({type:'refill',name:b.name,amount:total,remaining:total,desc,time:now()});
+  // Se houver rótulo vinculado na adega, registra compra automática
+  const linked = cellar.find(l=>l.linkedBottleId===b.id);
+  if(linked){
+    linked.buys = linked.buys||[];
+    const today = new Date().toISOString().slice(0,10);
+    linked.buys.push({date:today, vintage:'', note:'Reabastecimento automático do estoque'});
+  }
+  showToast('Garrafa reabastecida ✓');
+  closeModals(); renderAll(); saveData();
+}
+
+// Editar
+function openEdit(id){
+  const b=bottles.find(x=>x.id===id); if(!b) return;
+  activeId=id;
+  editSelectedEmoji=b.emoji||DEFAULT_EMOJI;
+  document.getElementById('e-name').value=b.name;
+  document.getElementById('e-total').value=b.total;
+  document.getElementById('e-current').value=b.current;
+  document.getElementById('e-category').value=b.category;
+  buildEmojiPicker('edit-emoji-picker',editSelectedEmoji,selectEditEmoji);
+  document.getElementById('modal-edit').classList.add('open');
+}
+function confirmEdit(){
+  const name    =document.getElementById('e-name').value.trim();
+  const rawTotal=document.getElementById('e-total').value;
+  const rawCurr =document.getElementById('e-current').value;
+  const category=document.getElementById('e-category').value;
+  if(!name){ alert('O nome não pode ficar em branco!'); return; }
+  const total  =rawTotal===''||isNaN(parseInt(rawTotal))?750:Math.max(1,parseInt(rawTotal));
+  const current=rawCurr===''||isNaN(parseInt(rawCurr))?total:Math.min(parseInt(rawCurr),total);
+  const b=bottles.find(x=>x.id===activeId); if(!b) return;
+  const oldName=b.name;
+  b.name=name; b.category=category; b.total=total; b.current=current; b.emoji=editSelectedEmoji;
+  history.push({type:'edit',name:b.name,amount:current,remaining:current,
+    desc:oldName!==name?`Renomeada de "${oldName}"`:'' ,time:now()});
+  showToast('Alterações salvas ✓');
+  closeModals(); renderAll(); saveData();
+}
+
+// Deletar
+function openDelete(id){
+  const b=bottles.find(x=>x.id===id); if(!b) return;
+  activeId=id;
+  document.getElementById('d-name').textContent=b.emoji+' '+b.name;
+  document.getElementById('d-cat').textContent=b.category;
+  document.getElementById('modal-delete').classList.add('open');
+}
+function confirmDelete(){
+  const b=bottles.find(x=>x.id===activeId); if(!b) return;
+  history.push({type:'del',name:b.name,amount:0,remaining:0,desc:'',time:now()});
+  bottles=bottles.filter(x=>x.id!==activeId);
+  showToast('Garrafa removida', true);
+  closeModals(); renderAll(); saveData();
+}
+
+// Histórico
+function confirmClearHistory(){ document.getElementById('modal-clear').classList.add('open'); }
+function doClearHistory(){ history=[]; showToast('Histórico limpo'); closeModals(); renderHistory(); saveData(); }
+
+// ── Drag & Drop (mouse + touch) ───────────────────────
+let _dragSrc=null;
+
+function initDrag(){
+  const grid=document.getElementById('bottles-grid');
+  grid.querySelectorAll('.bottle-card').forEach(card=>{
+    const handle=card.querySelector('.drag-handle');
+
+    // Mouse
+    handle.addEventListener('mousedown',e=>{
+      e.preventDefault();
+      _dragSrc=card;
+      card.classList.add('dragging');
+      const onMove=ev=>{
+        const target=_hitCard(ev.clientX,ev.clientY);
+        grid.querySelectorAll('.bottle-card').forEach(c=>c.classList.remove('drag-over'));
+        if(target) target.classList.add('drag-over');
+      };
+      const onUp=ev=>{
+        card.classList.remove('dragging');
+        const target=_hitCard(ev.clientX,ev.clientY);
+        if(target) _swapCards(parseInt(_dragSrc.dataset.id),parseInt(target.dataset.id));
+        grid.querySelectorAll('.bottle-card').forEach(c=>c.classList.remove('drag-over'));
+        _dragSrc=null;
+        document.removeEventListener('mousemove',onMove);
+        document.removeEventListener('mouseup',onUp);
+      };
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+    });
+
+    // Touch
+    handle.addEventListener('touchstart',e=>{
+      e.preventDefault();
+      _dragSrc=card;
+      card.classList.add('dragging');
+    },{passive:false});
+
+    handle.addEventListener('touchmove',e=>{
+      e.preventDefault();
+      const t=e.touches[0];
+      const target=_hitCard(t.clientX,t.clientY);
+      grid.querySelectorAll('.bottle-card').forEach(c=>c.classList.remove('drag-over'));
+      if(target) target.classList.add('drag-over');
+    },{passive:false});
+
+    handle.addEventListener('touchend',e=>{
+      const t=e.changedTouches[0];
+      const target=_hitCard(t.clientX,t.clientY);
+      if(_dragSrc) _dragSrc.classList.remove('dragging');
+      if(target&&_dragSrc) _swapCards(parseInt(_dragSrc.dataset.id),parseInt(target.dataset.id));
+      grid.querySelectorAll('.bottle-card').forEach(c=>c.classList.remove('drag-over'));
+      _dragSrc=null;
+    });
+  });
+}
+
+function _hitCard(x,y){
+  return document.elementsFromPoint(x,y).find(el=>el.classList.contains('bottle-card')&&el!==_dragSrc)||null;
+}
+function _swapCards(idA,idB){
+  const iA=bottles.findIndex(b=>b.id===idA), iB=bottles.findIndex(b=>b.id===idB);
+  if(iA===-1||iB===-1) return;
+  [bottles[iA],bottles[iB]]=[bottles[iB],bottles[iA]];
+  renderAll(); saveData();
+}
+
+// ══════════════════════════════════════════════════════
+// ── ADEGA ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+
+const LABEL_TYPES = {
+  'vinho-tinto':  { name:'Vinho Tinto',   emoji:'🍷', scoreMax:100 },
+  'vinho-branco': { name:'Vinho Branco',  emoji:'🥂', scoreMax:100 },
+  'vinho-rose':   { name:'Vinho Rosé',    emoji:'🌸', scoreMax:100 },
+  'espumante':    { name:'Espumante',     emoji:'✨', scoreMax:100 },
+  'cerveja':      { name:'Cerveja',       emoji:'🍺', scoreMax:50  },
+  'whisky':       { name:'Whisky',        emoji:'🥃', scoreMax:100 },
+};
+
+// Parâmetros por tipo — label, max, peso para nota auto
+const PARAMS = {
+  'vinho-tinto':  [
+    {id:'cor',     label:'Cor / Aparência',         max:15, desc:'Intensidade, limpidez, tonalidade'},
+    {id:'aroma',   label:'Aroma / Nariz',            max:25, desc:'Complexidade, frutas, flores, especiarias'},
+    {id:'sabor',   label:'Sabor / Paladar',          max:25, desc:'Estrutura, equilíbrio, frutas'},
+    {id:'taninos', label:'Taninos',                  max:10, desc:'Maciez, presença, adstringência'},
+    {id:'acidez',  label:'Acidez / Corpo',           max:10, desc:'Equilíbrio, frescor, estrutura'},
+    {id:'final',   label:'Final / Persistência',     max:15, desc:'Extensão e qualidade do retrogosto'},
+  ],
+  'vinho-branco': [
+    {id:'cor',     label:'Cor / Aparência',          max:15, desc:'Limpidez, brilho, tonalidade'},
+    {id:'aroma',   label:'Aroma / Nariz',            max:25, desc:'Frutas cítricas, florais, minerais'},
+    {id:'sabor',   label:'Sabor / Paladar',          max:25, desc:'Equilíbrio, frescor, complexidade'},
+    {id:'acidez',  label:'Acidez',                   max:20, desc:'Vivacidade, equilíbrio, persistência'},
+    {id:'final',   label:'Final / Persistência',     max:15, desc:'Extensão e qualidade do retrogosto'},
+  ],
+  'vinho-rose': [
+    {id:'cor',     label:'Cor / Aparência',          max:15, desc:'Tonalidade, intensidade, limpidez'},
+    {id:'aroma',   label:'Aroma / Nariz',            max:25, desc:'Frutas vermelhas, florais, frescor'},
+    {id:'sabor',   label:'Sabor / Paladar',          max:25, desc:'Equilíbrio, leveza, frescor'},
+    {id:'acidez',  label:'Acidez / Corpo',           max:20, desc:'Vivacidade e equilíbrio'},
+    {id:'final',   label:'Final / Persistência',     max:15, desc:'Extensão e qualidade do retrogosto'},
+  ],
+  'espumante': [
+    {id:'borbulhas',label:'Borbulhas / Perlage',    max:20, desc:'Fineza, persistência, quantidade'},
+    {id:'aroma',   label:'Aroma / Nariz',            max:25, desc:'Frutas, flores, levedura, autolítico'},
+    {id:'sabor',   label:'Sabor / Paladar',          max:25, desc:'Equilíbrio doçura/acidez, complexidade'},
+    {id:'acidez',  label:'Acidez / Frescor',         max:15, desc:'Vivacidade e equilíbrio'},
+    {id:'final',   label:'Final / Persistência',     max:15, desc:'Extensão e qualidade do retrogosto'},
+  ],
+  'cerveja': [
+    {id:'aparencia',label:'Aparência',               max:10, desc:'Cor, turbidez, colarinho (BJCP)'},
+    {id:'aroma',   label:'Aroma',                    max:12, desc:'Malte, lúpulo, ésteres, levedura'},
+    {id:'sabor',   label:'Sabor',                    max:20, desc:'Equilíbrio malte/lúpulo, amargor'},
+    {id:'boca',    label:'Sensação na Boca',         max:8,  desc:'Corpo, carbonatação, adstringência'},
+  ],
+  'whisky': [
+    {id:'nariz',   label:'Nariz / Aroma',            max:25, desc:'Complexidade, intensidade, elegância'},
+    {id:'paladar', label:'Paladar / Sabor',          max:25, desc:'Corpo, equilíbrio, complexidade'},
+    {id:'final',   label:'Final / Persistência',     max:25, desc:'Extensão, qualidade, complexidade'},
+    {id:'balance', label:'Equilíbrio Geral',         max:25, desc:'Harmonia entre todos os elementos'},
+  ],
+};
+
+function scoreDescription(score, type){
+  if(score===null||score===undefined) return 'Sem avaliação';
+  const max = LABEL_TYPES[type]?.scoreMax || 100;
+  if(max===50){ // BJCP cerveja
+    if(score>=46) return 'Outstanding';
+    if(score>=38) return 'Excellent';
+    if(score>=30) return 'Very Good';
+    if(score>=20) return 'Good';
+    if(score>=10) return 'Fair';
+    return 'Problematic';
+  }
+  // Wine Spectator / Jim Murray 100pts
+  if(score>=98) return 'Clássico — obra-prima';
+  if(score>=94) return 'Extraordinário';
+  if(score>=90) return 'Excelente';
+  if(score>=85) return 'Muito bom';
+  if(score>=80) return 'Bom';
+  if(score>=75) return 'Acima da média';
+  if(score>=70) return 'Médio';
+  return 'Abaixo da média';
+}
+
+function typeClass(type){
+  return 'type-'+type;
+}
+
+// ── Render Adega grid ─────────────────────────────────
+function renderCellar(){
+  const grid = document.getElementById('cellar-grid');
+  let list = _adeFilter ? cellar.filter(l=>l.type===_adeFilter) : [...cellar];
+  if(!cellar.length){
+    grid.innerHTML='<div class="cellar-empty"><div class="big">🍷</div>Nenhum rótulo cadastrado ainda.<br>Toque em <strong>+ Rótulo</strong> para começar!</div>';
+    return;
+  }
+  if(!list.length){
+    grid.innerHTML='<div class="cellar-empty">Nenhum rótulo nessa categoria.</div>';
+    return;
+  }
+  const typeInfo = LABEL_TYPES;
+  grid.innerHTML = list.map(l=>{
+    const t = typeInfo[l.type]||{emoji:'🍾',name:l.type};
+    const imgHtml = l.img
+      ? `<div class="cellar-img"><img src="${l.img}" alt="${l.name}" /></div>`
+      : `<div class="cellar-img">${t.emoji}</div>`;
+    const buysCount = (l.buys||[]).length;
+    const scoreHtml = (l.score!==null&&l.score!==undefined)
+      ? `<div><div class="cellar-score">${l.score}</div><div class="cellar-score-lbl">${t.scoreMax===50?'/ 50':'/ 100'}</div></div>`
+      : '';
+    return `<div class="cellar-card" onclick="openLabel('${l.id}')">
+      <div class="cellar-card-inner">
+        ${imgHtml}
+        <div class="cellar-info">
+          <div class="cellar-name">${l.name}</div>
+          <div class="cellar-producer">${l.producer||''} ${l.region?'· '+l.region:''}</div>
+          <span class="cellar-type-badge ${typeClass(l.type)}">${t.emoji} ${t.name}</span>
+          <div class="cellar-meta">
+            ${scoreHtml}
+            <div class="cellar-buys">🛒 ${buysCount} compra${buysCount!==1?'s':''}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setAdeFilter(btn, filter){
+  _adeFilter = filter;
+  document.querySelectorAll('.adega-filt-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCellar();
+}
+
+// ── Params UI ─────────────────────────────────────────
+function buildParams(type, values={}){
+  const params = PARAMS[type]||[];
+  const max = LABEL_TYPES[type]?.scoreMax||100;
+  document.getElementById('params-title').textContent =
+    type==='cerveja' ? 'Avaliação — padrão BJCP (0–50)' :
+    type==='whisky'  ? 'Avaliação — padrão Jim Murray (0–100)' :
+                       'Avaliação — padrão Wine Spectator (0–100)';
+  document.getElementById('params-container').innerHTML = params.map(p=>{
+    const val = values[p.id]!==undefined ? values[p.id] : 0;
+    return `<div class="param-row">
+      <div class="param-label" title="${p.desc}">${p.label} <span style="color:var(--text3);font-size:10px;">(/${p.max})</span></div>
+      <input type="range" class="param-slider" id="param-${p.id}" min="0" max="${p.max}" value="${val}" oninput="updateParamVal('${p.id}',this.value)" />
+      <div class="param-val" id="pval-${p.id}">${val}</div>
+    </div>`;
+  }).join('');
+  updateScoreDisplay();
+}
+
+function updateParamVal(id, val){
+  document.getElementById('pval-'+id).textContent = val;
+  updateScoreDisplay();
+}
+
+function getParamValues(){
+  const label = cellar.find(l=>l.id===activeLabelId)||{};
+  const params = PARAMS[document.getElementById('ml-type').value]||[];
+  const vals = {};
+  params.forEach(p=>{
+    const el = document.getElementById('param-'+p.id);
+    if(el) vals[p.id] = parseInt(el.value)||0;
+  });
+  return vals;
+}
+
+function calcAutoScore(){
+  const vals = getParamValues();
+  const total = Object.values(vals).reduce((s,v)=>s+v,0);
+  const type = document.getElementById('ml-type').value;
+  const max = LABEL_TYPES[type]?.scoreMax||100;
+  // Normalise to max
+  const paramMax = (PARAMS[type]||[]).reduce((s,p)=>s+p.max,0);
+  const score = paramMax>0 ? Math.round((total/paramMax)*max) : 0;
+  applyScore(score);
+  document.getElementById('ml-manual-score-wrap').style.display='none';
+}
+
+function toggleManualScore(){
+  const wrap = document.getElementById('ml-manual-score-wrap');
+  wrap.style.display = wrap.style.display==='none' ? 'block' : 'none';
+}
+
+function onManualScoreInput(){
+  const type = document.getElementById('ml-type').value;
+  const max  = LABEL_TYPES[type]?.scoreMax||100;
+  let v = parseInt(document.getElementById('ml-manual-score').value)||0;
+  v = Math.max(0, Math.min(max, v));
+  applyScore(v);
+}
+
+function applyScore(score){
+  const type = document.getElementById('ml-type').value;
+  const max  = LABEL_TYPES[type]?.scoreMax||100;
+  document.getElementById('ml-score-display').textContent = score+' / '+max;
+  document.getElementById('ml-score-desc').textContent = scoreDescription(score, type);
+  // store temp on label obj
+  const label = cellar.find(l=>l.id===activeLabelId);
+  if(label) label._tmpScore = score;
+}
+
+function updateScoreDisplay(){
+  const label = cellar.find(l=>l.id===activeLabelId);
+  const score = label?._tmpScore ?? label?.score ?? null;
+  const type  = document.getElementById('ml-type')?.value||'vinho-tinto';
+  const max   = LABEL_TYPES[type]?.scoreMax||100;
+  if(score===null||score===undefined){
+    document.getElementById('ml-score-display').textContent='—';
+    document.getElementById('ml-score-desc').textContent='Nenhuma avaliação ainda';
+  } else {
+    document.getElementById('ml-score-display').textContent=score+' / '+max;
+    document.getElementById('ml-score-desc').textContent=scoreDescription(score,type);
+  }
+}
+
+function onLabelTypeChange(){
+  const type = document.getElementById('ml-type').value;
+  const label = cellar.find(l=>l.id===activeLabelId)||{};
+  buildParams(type, label.params||{});
+  // Show refill-link-wrap only for whisky
+  document.getElementById('refill-link-wrap').style.display = type==='whisky'?'block':'none';
+  // Change vintage label
+  document.getElementById('buy-vintage-lbl').textContent = type==='cerveja'?'Lote / Edição':'Safra / Ano';
+}
+
+// ── Open / new label ──────────────────────────────────
+function openNewLabel(){
+  _labelIsNew = true;
+  activeLabelId = 'new-'+Date.now();
+  const newLabel = {id:activeLabelId,name:'',producer:'',type:'vinho-tinto',region:'',img:null,score:null,params:{},buys:[],review:'',linkedBottleId:null};
+  cellar.push(newLabel);
+  _populateLabelModal(newLabel);
+  document.getElementById('modal-label').classList.add('open');
+}
+
+function openLabel(id){
+  _labelIsNew = false;
+  activeLabelId = id;
+  const label = cellar.find(l=>l.id===id); if(!label) return;
+  _populateLabelModal(label);
+  document.getElementById('modal-label').classList.add('open');
+}
+
+function closeLabelModal(){
+  // If brand-new and never saved (name still empty), discard it
+  if(_labelIsNew){
+    const l = cellar.find(x=>x.id===activeLabelId);
+    if(l && !l.name) cellar = cellar.filter(x=>x.id!==activeLabelId);
+  }
+  _labelIsNew = false;
+  activeLabelId = null;
+  document.getElementById('modal-label').classList.remove('open');
+  renderCellar();
+}
+
+function _populateLabelModal(label){
+  _labelImg = label.img||null;
+  document.getElementById('ml-title').textContent    = label.name||'Novo rótulo';
+  document.getElementById('ml-name').value           = label.name||'';
+  document.getElementById('ml-producer').value       = label.producer||'';
+  document.getElementById('ml-type').value           = label.type||'vinho-tinto';
+  document.getElementById('ml-region').value         = label.region||'';
+  document.getElementById('ml-review').value         = label.review||'';
+  document.getElementById('ml-manual-score-wrap').style.display='none';
+  // Image preview
+  const prev = document.getElementById('ml-img-preview');
+  if(label.img) prev.innerHTML=`<img src="${label.img}" alt="rótulo"/>`;
+  else prev.innerHTML='📷';
+  // Score
+  if(label.score!==null&&label.score!==undefined) label._tmpScore=label.score;
+  else delete label._tmpScore;
+  // Params
+  buildParams(label.type, label.params||{});
+  // Buys
+  renderBuys(label);
+  // Refill link (whisky only)
+  document.getElementById('refill-link-wrap').style.display = label.type==='whisky'?'block':'none';
+  renderLinkedBottle(label);
+  // Buy form hidden
+  _showBuyForm=false;
+  document.getElementById('buy-form-wrap').style.display='none';
+}
+
+// ── Image upload ──────────────────────────────────────
+function triggerImgUpload(){
+  document.getElementById('ml-img-input').click();
+}
+function handleImgUpload(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    _labelImg = ev.target.result;
+    const prev = document.getElementById('ml-img-preview');
+    prev.innerHTML=`<img src="${_labelImg}" alt="rótulo"/>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Buys ──────────────────────────────────────────────
+function renderBuys(label){
+  const list = document.getElementById('buys-list');
+  const buys = label.buys||[];
+  if(!buys.length){ list.innerHTML='<div style="font-size:13px;color:var(--text3);padding:8px 0;">Nenhuma compra registrada ainda.</div>'; return; }
+  list.innerHTML=[...buys].reverse().map((b,ri)=>{
+    const i = buys.length-1-ri;
+    const fmtDate = b.date ? new Date(b.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+    return `<div class="buy-item">
+      <div>
+        <div class="buy-item-main">${fmtDate}${b.vintage?' · Safra '+b.vintage:''}</div>
+        ${b.note?`<div class="buy-item-sub">${b.note}</div>`:''}
+      </div>
+      <button class="buy-del" onclick="deleteBuy(${i})">×</button>
+    </div>`;
+  }).join('');
+}
+
+function toggleBuyForm(){
+  _showBuyForm=!_showBuyForm;
+  document.getElementById('buy-form-wrap').style.display=_showBuyForm?'block':'none';
+  if(_showBuyForm){
+    document.getElementById('buy-date').value=new Date().toISOString().slice(0,10);
+    document.getElementById('buy-vintage').value='';
+    document.getElementById('buy-note').value='';
+  }
+}
+
+function addBuy(){
+  const label=cellar.find(l=>l.id===activeLabelId); if(!label) return;
+  label.buys=label.buys||[];
+  label.buys.push({
+    date:    document.getElementById('buy-date').value,
+    vintage: document.getElementById('buy-vintage').value.trim(),
+    note:    document.getElementById('buy-note').value.trim(),
+  });
+  renderBuys(label);
+  toggleBuyForm();
+}
+
+function deleteBuy(i){
+  const label=cellar.find(l=>l.id===activeLabelId); if(!label) return;
+  label.buys.splice(i,1);
+  renderBuys(label);
+}
+
+// ── Save label ────────────────────────────────────────
+function saveLabel(){
+  const label=cellar.find(l=>l.id===activeLabelId); if(!label) return;
+  label.name     = document.getElementById('ml-name').value.trim()||'Sem nome';
+  label.producer = document.getElementById('ml-producer').value.trim();
+  label.type     = document.getElementById('ml-type').value;
+  label.region   = document.getElementById('ml-region').value.trim();
+  label.review   = document.getElementById('ml-review').value.trim();
+  label.img      = _labelImg;
+  label.params   = getParamValues();
+  label.score    = label._tmpScore!==undefined ? label._tmpScore : label.score;
+  delete label._tmpScore;
+  _labelIsNew = false;
+  showToast('Rótulo salvo ✓');
+  closeModals();
+  renderCellar();
+  saveData();
+}
+
+// ── Delete label ──────────────────────────────────────
+function confirmDeleteLabel(){
+  if(!confirm('Remover este rótulo da adega?')) return;
+  cellar = cellar.filter(l=>l.id!==activeLabelId);
+  closeModals();
+  renderCellar();
+  saveData();
+  showToast('Rótulo removido');
+}
+
+// ── Link stock (whisky) ───────────────────────────────
+function openLinkStockModal(){
+  const sel = document.getElementById('link-bottle-select');
+  const whiskies = bottles.filter(b=>b.category==='Whisky');
+  sel.innerHTML = whiskies.length
+    ? whiskies.map(b=>`<option value="${b.id}">${b.emoji||'🥃'} ${b.name}</option>`).join('')
+    : '<option value="">Nenhum whisky no estoque</option>';
+  document.getElementById('modal-link-stock').classList.add('open');
+}
+
+function confirmLinkStock(){
+  const sel = document.getElementById('link-bottle-select');
+  const bid = parseInt(sel.value); if(!bid) return;
+  const label = cellar.find(l=>l.id===activeLabelId); if(!label) return;
+  label.linkedBottleId = bid;
+  document.getElementById('modal-link-stock').classList.remove('open');
+  renderLinkedBottle(label);
+  showToast('Vínculo criado ✓');
+}
+
+function renderLinkedBottle(label){
+  const wrap = document.getElementById('linked-bottle-info');
+  if(!label.linkedBottleId){ wrap.innerHTML=''; return; }
+  const b = bottles.find(x=>x.id===label.linkedBottleId);
+  wrap.innerHTML = b
+    ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">✓ Vinculado a <strong>${b.emoji||'🥃'} ${b.name}</strong> no estoque. Reabastecimentos serão contados como novas compras.</div>`
+    : `<div style="font-size:12px;color:var(--text3);margin-top:4px;">Garrafa vinculada não encontrada no estoque.</div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// ── DRINKS ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+
+const DRINK_PARAMS = [
+  {id:'aparencia', label:'Aparência / Apresentação', desc:'Cor, limpidez, guarnição, copo'},
+  {id:'aroma',     label:'Aroma',                    desc:'Intensidade, complexidade, convite'},
+  {id:'sabor',     label:'Sabor',                    desc:'Qualidade, complexidade, prazer'},
+  {id:'equilibrio',label:'Equilíbrio',               desc:'Harmonia doce/ácido/amargo/álcool'},
+  {id:'geral',     label:'Impressão geral',          desc:'Nota final pessoal'},
+];
+
+const STAR_LABELS = ['','Horrível','Ruim','Médio','Bom','Excepcional'];
+
+let _drinkFilter  = '';
+let _drinkSortAsc = false; // false = mais feitos primeiro
+let activeDrinkId = null;
+let _drinkImg     = null;
+
+function renderDrinks(){
+  const grid = document.getElementById('drinks-grid');
+  if(!drinks.length){
+    grid.innerHTML='<div class="drinks-empty" style="grid-column:1/-1"><div class="big">🍸</div>Nenhum drink cadastrado ainda.<br>Toque em <strong>+ Drink</strong> para começar!</div>';
+    return;
+  }
+  let list = _drinkFilter ? drinks.filter(d=>d.base===_drinkFilter) : [...drinks];
+  list.sort((a,b)=> _drinkSortAsc
+    ? (a.timesMade||0)-(b.timesMade||0)
+    : (b.timesMade||0)-(a.timesMade||0)
+  );
+  if(!list.length){
+    grid.innerHTML='<div class="drinks-empty" style="grid-column:1/-1">Nenhum drink nessa categoria.</div>';
+    return;
+  }
+  grid.innerHTML = list.map(d=>{
+    const stars = d.score ? '★'.repeat(d.score)+'☆'.repeat(5-d.score) : '☆☆☆☆☆';
+    const imgHtml = d.img
+      ? `<div class="drink-card-img"><img src="${d.img}" alt="${d.name}"/></div>`
+      : `<div class="drink-card-img">🍸</div>`;
+    return `<div class="drink-card" onclick="openDrink('${d.id}')">
+      ${imgHtml}
+      <div class="drink-card-name">${d.name}</div>
+      <div class="drink-card-base">${d.base}</div>
+      <div class="drink-stars">${stars}</div>
+      <div class="drink-times">${d.timesMade||0}× feito</div>
+      <button class="drink-make-btn" onclick="event.stopPropagation();openMakeDrink('${d.id}')">Fazer</button>
+    </div>`;
+  }).join('');
+}
+
+function setDrinkFilterSel(sel){
+  _drinkFilter = sel.value;
+  const s = document.getElementById('drinks-filter-sel');
+  if(s) s.classList.toggle('active', !!sel.value);
+  renderDrinks();
+}
+
+function toggleDrinkSort(){
+  _drinkSortAsc = !_drinkSortAsc;
+  document.getElementById('drink-sort-btn').textContent = _drinkSortAsc ? 'Menos feitos ↓' : 'Mais feitos ↑';
+  renderDrinks();
+}
+
+// ── Open / new drink ──────────────────────────────────
+let _drinkIsNew = false; // tracks if current modal is a brand-new unsaved drink
+
+function openNewDrink(){
+  _drinkIsNew = true;
+  activeDrinkId = 'dk-'+Date.now();
+  const d = {id:activeDrinkId,name:'',base:'Gin',img:null,score:null,params:{},ingredients:[],method:'',review:'',timesMade:0};
+  drinks.push(d);
+  _populateDrinkModal(d);
+  document.getElementById('modal-drink').classList.add('open');
+}
+
+function openDrink(id){
+  _drinkIsNew = false;
+  activeDrinkId = id;
+  const d = drinks.find(x=>x.id===id); if(!d) return;
+  _populateDrinkModal(d);
+  document.getElementById('modal-drink').classList.add('open');
+}
+
+function closeDrinkModal(){
+  // If it's a brand new drink that was never saved (name still empty), remove it
+  if(_drinkIsNew){
+    const d = drinks.find(x=>x.id===activeDrinkId);
+    if(d && !d.name) drinks = drinks.filter(x=>x.id!==activeDrinkId);
+  }
+  // Otherwise just close — discard any unsaved field edits (they aren't committed until saveDrink)
+  _drinkIsNew = false;
+  activeDrinkId = null;
+  document.getElementById('modal-drink').classList.remove('open');
+  renderDrinks();
+}
+
+function _populateDrinkModal(d){
+  _drinkImg = d.img||null;
+  document.getElementById('dk-title').textContent  = d.name||'Novo drink';
+  document.getElementById('dk-name').value         = d.name||'';
+  document.getElementById('dk-base').value         = d.base||'Gin';
+  document.getElementById('dk-method').value       = d.method||'';
+  document.getElementById('dk-review').value       = d.review||'';
+  document.getElementById('dk-times-made').textContent = d.timesMade||0;
+  // Image
+  const prev = document.getElementById('dk-img-preview');
+  prev.innerHTML = d.img ? `<img src="${d.img}" alt="drink"/>` : '🍸';
+  // Stars
+  buildStars(d.score||0);
+  // Params
+  buildDrinkParams(d.params||{});
+  // Ingredients
+  renderIngredients(d.ingredients||[]);
+}
+
+function buildStars(current){
+  const row = document.getElementById('dk-stars-row');
+  row.innerHTML = [1,2,3,4,5].map(i=>
+    `<button class="star-btn" onclick="setDrinkScore(${i})">${i<=(current||0)?'★':'☆'}</button>`
+  ).join('');
+  document.getElementById('dk-stars-desc').textContent = current ? STAR_LABELS[current] : 'Toque para avaliar';
+}
+
+function setDrinkScore(n){
+  const d = drinks.find(x=>x.id===activeDrinkId); if(!d) return;
+  d.score = n;
+  buildStars(n);
+}
+
+function buildDrinkParams(values){
+  document.getElementById('dk-params').innerHTML = DRINK_PARAMS.map(p=>{
+    const val = values[p.id]!==undefined ? values[p.id] : 0;
+    return `<div class="param-row">
+      <div class="param-label" title="${p.desc}">${p.label}</div>
+      <input type="range" class="param-slider" id="dkp-${p.id}" min="0" max="5" value="${val}" oninput="updateDrinkParam('${p.id}',this.value)" />
+      <div class="param-val" id="dkpv-${p.id}">${val}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateDrinkParam(id, val){
+  document.getElementById('dkpv-'+id).textContent = val;
+}
+
+function getDrinkParamValues(){
+  const vals = {};
+  DRINK_PARAMS.forEach(p=>{
+    const el = document.getElementById('dkp-'+p.id);
+    if(el) vals[p.id] = parseInt(el.value)||0;
+  });
+  return vals;
+}
+
+// ── Ingredients ───────────────────────────────────────
+function renderIngredients(list){
+  const cont = document.getElementById('dk-ingredients-list');
+  if(!list.length){
+    cont.innerHTML='<div style="font-size:13px;color:var(--text3);padding:6px 0;">Nenhum ingrediente adicionado.</div>';
+    return;
+  }
+  cont.innerHTML = list.map((ing,i)=>`
+    <div class="ingredient-row" id="ing-row-${i}">
+      <input type="text" class="ing-name" value="${ing.name}" placeholder="Ingrediente" oninput="updateIngredient(${i},'name',this.value)" />
+      <input type="number" class="ing-ml" value="${ing.ml||''}" placeholder="ml" min="0" inputmode="numeric" oninput="updateIngredient(${i},'ml',this.value)" />
+      <button class="ing-del" onclick="removeIngredient(${i})">×</button>
+    </div>`
+  ).join('');
+}
+
+function addIngredientRow(){
+  const d = drinks.find(x=>x.id===activeDrinkId); if(!d) return;
+  d.ingredients = d.ingredients||[];
+  d.ingredients.push({name:'',ml:''});
+  renderIngredients(d.ingredients);
+  // Focus last name field
+  setTimeout(()=>{
+    const rows = document.querySelectorAll('.ingredient-row .ing-name');
+    if(rows.length) rows[rows.length-1].focus();
+  },50);
+}
+
+function updateIngredient(i, field, val){
+  const d = drinks.find(x=>x.id===activeDrinkId); if(!d||!d.ingredients[i]) return;
+  d.ingredients[i][field] = field==='ml' ? (parseInt(val)||0) : val;
+}
+
+function removeIngredient(i){
+  const d = drinks.find(x=>x.id===activeDrinkId); if(!d) return;
+  d.ingredients.splice(i,1);
+  renderIngredients(d.ingredients);
+}
+
+// ── Image ─────────────────────────────────────────────
+function triggerDrinkImgUpload(){ document.getElementById('dk-img-input').click(); }
+function handleDrinkImgUpload(e){
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    _drinkImg=ev.target.result;
+    document.getElementById('dk-img-preview').innerHTML=`<img src="${_drinkImg}" alt="drink"/>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Save drink ────────────────────────────────────────
+function saveDrink(){
+  const d=drinks.find(x=>x.id===activeDrinkId); if(!d) return;
+  d.name   = document.getElementById('dk-name').value.trim()||'Sem nome';
+  d.base   = document.getElementById('dk-base').value;
+  d.method = document.getElementById('dk-method').value.trim();
+  d.review = document.getElementById('dk-review').value.trim();
+  d.img    = _drinkImg;
+  d.params = getDrinkParamValues();
+  _drinkIsNew = false;
+  showToast('Drink salvo ✓');
+  closeModals();
+  renderDrinks();
+  saveData();
+}
+
+function confirmDeleteDrink(){
+  if(!confirm('Remover este drink?')) return;
+  drinks = drinks.filter(x=>x.id!==activeDrinkId);
+  closeModals();
+  renderDrinks();
+  saveData();
+  showToast('Drink removido');
+}
+
+// ── Make drink (desconta estoque) ─────────────────────
+let _makeDrinkId = null;
+let _makeQty     = 1;
+
+function changeMakeQty(delta){
+  _makeQty = Math.max(1, _makeQty + delta);
+  document.getElementById('mk-qty').textContent = _makeQty;
+}
+
+function openMakeDrink(id){
+  _makeQty = 1;
+  const qtyEl = document.getElementById('mk-qty');
+  if(qtyEl) qtyEl.textContent = '1';
+  const d = drinks.find(x=>x.id===id); if(!d) return;
+  _makeDrinkId = id;
+  document.getElementById('mk-title').textContent = '🍸 '+d.name;
+  const cont = document.getElementById('mk-ingredient-selects');
+  // Find alcoholic ingredients (those whose name matches a bottle category or name)
+  const alcoholicIngs = (d.ingredients||[]).filter(ing=>ing.ml>0);
+  if(!alcoholicIngs.length){
+    cont.innerHTML='<div style="font-size:14px;color:var(--text2);">Nenhum ingrediente com ml cadastrado.</div>';
+  } else {
+    cont.innerHTML = alcoholicIngs.map((ing,i)=>{
+      // Find bottles that match ingredient name (fuzzy: bottle name contains ingredient name)
+      const matches = bottles.filter(b=>
+        b.name.toLowerCase().includes(ing.name.toLowerCase()) ||
+        ing.name.toLowerCase().includes(b.name.toLowerCase()) ||
+        b.category.toLowerCase().includes(ing.name.toLowerCase()) ||
+        ing.name.toLowerCase().includes(b.category.toLowerCase())
+      ).filter(b=>b.current>0);
+      const hasMatch = matches.length>0;
+      return `<div class="mk-row">
+        <label>${ing.name} — ${ing.ml} ml</label>
+        ${hasMatch
+          ? `<select id="mk-sel-${i}" data-ing="${i}" style="width:100%;height:40px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-sans);font-size:14px;padding:0 10px;appearance:none;">
+              ${matches.map(b=>`<option value="${b.id}">${b.emoji||''} ${b.name} (${b.current} ml)</option>`).join('')}
+              <option value="">Não descontar</option>
+             </select>`
+          : `<div class="mk-desc" style="color:var(--text3);">Nenhuma garrafa correspondente no estoque — não será descontado.</div>`
+        }
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('modal-make-drink').classList.add('open');
+}
+
+function confirmMakeDrink(){
+  const d = drinks.find(x=>x.id===_makeDrinkId); if(!d) return;
+  const alcoholicIngs = (d.ingredients||[]).filter(ing=>ing.ml>0);
+  let deducted = [];
+  alcoholicIngs.forEach((ing,i)=>{
+    const sel = document.getElementById('mk-sel-'+i);
+    if(!sel) return;
+    const bid = parseInt(sel.value);
+    if(!bid) return;
+    const b = bottles.find(x=>x.id===bid); if(!b) return;
+    const amount = Math.min(ing.ml * _makeQty, b.current);
+    b.current -= amount;
+    useCount[b.id]=(useCount[b.id]||0)+1;
+    if(b.current===0) emptyCount[String(b.id)]=(emptyCount[String(b.id)]||0)+1;
+    history.push({type:'use',name:b.name,amount,remaining:b.current,desc:`Drink: ${d.name}${_makeQty>1?' (×'+_makeQty+')':''}`,time:now()});
+    deducted.push(`${b.name} −${amount}ml`);
+  });
+  d.timesMade=(d.timesMade||0)+_makeQty;
+  showToast(`${d.name} feito! ${deducted.length?deducted.join(', '):''}`);
+  closeModals();
+  renderAll();
+  renderDrinks();
+  saveData();
+}
+
+// ── Mouse drag scroll for adega-filter ───────────────
+function initDragScroll(el){
+  if(!el) return;
+  let isDown=false, startX, scrollLeft;
+  el.addEventListener('mousedown',e=>{
+    isDown=true; el.style.cursor='grabbing';
+    startX=e.pageX-el.offsetLeft;
+    scrollLeft=el.scrollLeft;
+  });
+  el.addEventListener('mouseleave',()=>{ isDown=false; el.style.cursor='grab'; });
+  el.addEventListener('mouseup',()=>{ isDown=false; el.style.cursor='grab'; });
+  el.addEventListener('mousemove',e=>{
+    if(!isDown) return;
+    e.preventDefault();
+    const x=e.pageX-el.offsetLeft;
+    el.scrollLeft=scrollLeft-(x-startX);
+  });
+  el.style.cursor='grab';
+}
+
+// ── Init ──────────────────────────────────────────────
+(async ()=>{
+  await loadData();
+  renderAll();
+  buildEmojiPicker('emoji-picker',selectedEmoji,selectNewEmoji);
+  initDragScroll(document.getElementById('adega-filter'));
+})();
+</script>
+</body>
+</html>
